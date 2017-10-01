@@ -17,14 +17,13 @@ NODEPS := clean read
 
 all: $(HEX)
 
+# Don't create dependencies when we're cleaning, for instance
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
+-include $(DEPS)
 # Error if multiple or no definitions of `main()`
 ifneq (1, $(words $(HEX)))
 $(error "main() defined in: $(HEX)")
 endif
-
-# Don't create dependencies when we're cleaning, for instance
-ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
--include $(DEPS)
 endif
 
 .SECONDEXPANSION:
