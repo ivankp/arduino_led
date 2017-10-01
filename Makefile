@@ -10,10 +10,10 @@ DEPS := $(OBJS:.o=.d)
 
 GREP_MAIN := grep -rl '^ *\(int\|void\) \+main *(' --include='*.c' src
 HEX := $(patsubst src/%.c,%.hex,$(shell $(GREP_MAIN)))
-ELF := $(patsubst %.hex,.build/%.elf,$(HEX))
+ELF := $(patsubst %.hex,.build/%,$(HEX))
 
 NODEPS := clean read
-.PHONY: write clean read
+.PHONY: write clean read asm
 
 all: $(HEX)
 
@@ -52,4 +52,7 @@ read:
 
 clean:
 	@rm -rfv .build $(HEX)
+
+asm: $(ELF)
+	avr-objdump -d $< > $(patsubst .build/%,%.s,$<)
 
