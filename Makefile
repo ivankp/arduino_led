@@ -1,30 +1,31 @@
-CC := avr-gcc
-DF := -Isrc
-CF := -DF_CPU=16000000UL -mmcu=atmega328p -Wall -fmax-errors=3 -Os -flto -Isrc
-LF := -mmcu=atmega328p -flto
-AVRDUDE_FLAGS := -F -V -c arduino -p ATMEGA328P -P /dev/ttyACM0 -b 115200
+CC = avr-gcc
+DF = -Isrc
+CF = -DF_CPU=16000000UL -mmcu=atmega328p -Wall -fmax-errors=3 -Os -flto -Isrc
+LF = -mmcu=atmega328p -flto
+AVRDUDE = $(shell which avrdude)
+AVRDUDE_FLAGS = -F -V -c arduino -p ATMEGA328P -P /dev/ttyACM0 -b 115200
 
-SRCS := $(shell find src -type f -name '*.c')
-OBJS := $(patsubst src/%.c,.build/%.o,$(SRCS))
-DEPS := $(OBJS:.o=.d)
+.PHONY: write clean read asm
 
-GREP_MAIN := grep -rl '^ *\(int\|void\) \+main *(' --include='*.c' src
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean read)))
+
+SRCS = $(shell find src -type f -name '*.c')
+OBJS = $(patsubst src/%.c,.build/%.o,$(SRCS))
+DEPS = $(OBJS:.o=.d)
+
+GREP_MAIN := egrep -rl '^ *(int|void) +main *\(' --include='*.c' src
 HEX := $(patsubst src/%.c,%.hex,$(shell $(GREP_MAIN)))
 ELF := $(patsubst %.hex,.build/%,$(HEX))
 
-NODEPS := clean read
-.PHONY: write clean read asm
-
 all: $(HEX)
 
-# Don't create dependencies when we're cleaning, for instance
-ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
--include $(DEPS)
-# Error if multiple or no definitions of `main()`
+ifneq (0, $(words $(findstring $(MAKECMDGOALS), write)))
 ifneq (1, $(words $(HEX)))
-$(error "main() defined in: $(HEX)")
+$(error "hex files: $(HEX)")
 endif
 endif
+
+-include $(DEPS)
 
 .SECONDEXPANSION:
 
@@ -34,24 +35,29 @@ $(DEPS): .build/%.d: src/%.c | .build/$$(dir %)
 .build/%.o:
 	$(CC) $(CF) $(C_$*) -c $(filter %.c,$^) -o $@
 
-$(ELF): $(OBJS)
-	$(CC) $(LF) $^ -o $@ $(L_$*)
+$(ELF): %: %.o
+	$(CC) $(LF) $(filter %.o,$^) -o $@ $(L_$*)
 
-$(HEX): $(ELF)
+asm: $(ELF)
+	avr-objdump -d $< > $(patsubst .build/%,%.s,$<)
+
+%.hex: .build/%
 	avr-objcopy -O ihex -R .eeprom $< $@
 
 write: $(HEX)
-	avrdude $(AVRDUDE_FLAGS) -U flash:w:$<
+	sudo $(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:w:$<
 
-read:
-	avrdude $(AVRDUDE_FLAGS) -U flash:r:$(shell date +%s).hex:i
+write_%: %.hex
+	sudo $(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:w:$<
 
 .build/%/:
 	mkdir -p $@
 
+endif
+
+read:
+	sudo $(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:r:$(shell date +%s).hex:i
+
 clean:
 	@rm -rfv .build $(HEX)
-
-asm: $(ELF)
-	avr-objdump -d $< > $(patsubst .build/%,%.s,$<)
 
