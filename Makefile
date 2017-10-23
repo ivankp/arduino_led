@@ -5,17 +5,16 @@ LF = -mmcu=atmega328p -flto
 AVRDUDE = $(shell which avrdude)
 AVRDUDE_FLAGS = -F -V -c arduino -p ATMEGA328P -P /dev/ttyACM0 -b 115200
 
-.PHONY: write clean read asm
+.PHONY: all clean write read
+
+GREP_MAIN := egrep -rl '^ *int +main *\(' --include='*.c' src
+HEX := $(patsubst src/%.c,%.hex,$(shell $(GREP_MAIN)))
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), clean read)))
 
 SRCS = $(shell find src -type f -name '*.c')
 OBJS = $(patsubst src/%.c,.build/%.o,$(SRCS))
 DEPS = $(OBJS:.o=.d)
-
-GREP_MAIN := egrep -rl '^ *(int|void) +main *\(' --include='*.c' src
-HEX := $(patsubst src/%.c,%.hex,$(shell $(GREP_MAIN)))
-ELF := $(patsubst %.hex,.build/%,$(HEX))
 
 all: $(HEX)
 
@@ -35,14 +34,14 @@ $(DEPS): .build/%.d: src/%.c | .build/$$(dir %)
 .build/%.o:
 	$(CC) $(CF) $(C_$*) -c $(filter %.c,$^) -o $@
 
-$(ELF): %: %.o
+.build/%.elf: .build/%.o
 	$(CC) $(LF) $(filter %.o,$^) -o $@ $(L_$*)
 
-asm: $(ELF)
-	avr-objdump -d $< > $(patsubst .build/%,%.s,$<)
-
-%.hex: .build/%
+%.hex: .build/%.elf
 	avr-objcopy -O ihex -R .eeprom $< $@
+
+%.s: .build/%.elf
+	avr-objdump -d $< > $@
 
 write: $(HEX)
 	sudo $(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:w:$<
